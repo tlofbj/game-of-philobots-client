@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: monospace;
+            background: white;
+            color: black;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        h2 {
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .box {
+            border: 1px solid black;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid black;
+            font-family: monospace;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        button {
+            padding: 5px 10px;
+            border: 1px solid black;
+            background: white;
+            color: black;
+            font-family: monospace;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: black;
+            color: white;
+        }
+        pre {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid black;
+            background: white;
+            overflow-x: auto;
+            font-size: 12px;
+            white-space: pre-wrap;
+            min-height: 100px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        .method-section {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        select {
+            width: auto;
+            min-width: 100px;
+        }
+        #postBodySection {
+            display: none;
+        }
+        #postBodySection.visible {
+            display: block;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+    </style>
+</head>
+<body>
+    <h1>Backend Tester</h1>
+    
+    <div class="box">
+        <h2>Server URL</h2>
+        <input type="text" id="serverUrl" value="http://localhost:4242">
+    </div>
+
+    <div class="box">
+        <h2>API Request</h2>
+        <form onsubmit="testEndpoint(event)">
+            <div class="method-section">
+                <label for="method" class="label" style="display: inline; margin: 0;">Method:</label>
+                <select id="method" onchange="togglePostFields()">
+                    <option value="GET">GET</option>
+                    <option value="POST" selected>POST</option>
+                </select>
+            </div>
+            <input type="text" id="endpoint" placeholder="/npc/descartes" value="/npc/descartes" required>
+            
+            <div id="postBodySection" class="visible">
+                <label for="postBody" class="label">Request Body (JSON):</label>
+                <textarea id="postBody" placeholder='{"message": "Hello, who are you?"}'>{"message": "Hello, who are you?"}</textarea>
+                <small style="font-size: 10px; color: #666;">Required field: "message" (string)</small>
+            </div>
+            
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <div class="box">
+        <h2>Result</h2>
+        <pre id="result"></pre>
+    </div>
+
+    <script>
+        function togglePostFields() {
+            const method = document.getElementById('method').value;
+            const postBodySection = document.getElementById('postBodySection');
+            
+            if (method === 'POST') {
+                postBodySection.classList.add('visible');
+            } else {
+                postBodySection.classList.remove('visible');
+            }
+        }
+
+        async function testEndpoint(event) {
+            event.preventDefault();
+            
+            const resultDiv = document.getElementById('result');
+            const serverUrl = document.getElementById('serverUrl').value;
+            const endpoint = document.getElementById('endpoint').value;
+            const method = document.getElementById('method').value;
+            const postBody = document.getElementById('postBody').value;
+            
+            resultDiv.textContent = 'Loading...';
+            resultDiv.className = '';
+            
+            try {
+                const url = `${serverUrl}${endpoint}`;
+                const options = {
+                    method: method,
+                    headers: {}
+                };
+                
+                // Add body for POST requests
+                if (method === 'POST') {
+                    if (!postBody.trim()) {
+                        resultDiv.textContent = 'Error: POST request requires a request body';
+                        resultDiv.className = 'error';
+                        return;
+                    }
+                    
+                    try {
+                        // Validate and parse JSON
+                        const parsed = JSON.parse(postBody);
+                        // Validate structure for our endpoint
+                        if (method === 'POST' && endpoint.includes('descartes')) {
+                            if (!parsed.message || typeof parsed.message !== 'string') {
+                                resultDiv.textContent = 'Error: Request body must include "message" field (string)';
+                                resultDiv.className = 'error';
+                                return;
+                            }
+                        }
+                        options.body = JSON.stringify(parsed);
+                        options.headers['Content-Type'] = 'application/json';
+                    } catch (e) {
+                        resultDiv.textContent = `Error: Invalid JSON in request body\n\n${e.message}\n\nMake sure:\n- All keys are in double quotes\n- No trailing commas\n- Proper comma placement\n\nExample:\n{"message": "Hello"}`;
+                        resultDiv.className = 'error';
+                        return;
+                    }
+                }
+                
+                const response = await fetch(url, options);
+                
+                let data;
+                const contentType = response.headers.get('content-type');
+                
+                try {
+                    if (contentType && contentType.includes('application/json')) {
+                        data = await response.json();
+                    } else {
+                        data = await response.text();
+                    }
+                } catch (e) {
+                    data = `Failed to parse response: ${e.message}`;
+                }
+                
+                const result = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    method: method,
+                    url: url,
+                    data: data
+                };
+                
+                resultDiv.textContent = JSON.stringify(result, null, 2);
+                resultDiv.className = response.ok ? 'success' : 'error';
+                
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}\n\nCheck:\n- Server is running on ${serverUrl}\n- CORS is enabled\n- Network connectivity`;
+                resultDiv.className = 'error';
+            }
+        }
+    </script>
+</body>
+</html>
+
